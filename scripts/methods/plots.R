@@ -107,8 +107,7 @@ PlotMapWithRanges <- function(datZ, datAZ, i, zcol, azcol, alpha=20, legend=TRUE
 	par(oldpar)
 }
 
-CompareSST <- function(zSST, azSST,
-											 col, wilcox=NULL){
+CompareSST <- function(zSST, azSST, col, wilcox=TRUE){
 	plot(c(1,2), y=c(0,40), xlim=c(0.5,2.5), ylim=c(-5,40), type="n", axes=FALSE,
 			 ylab=expression("Sea Surface Temperature ("*~degree*C*")"), xlab="",
 			 xaxs="i", yaxs="i")
@@ -126,7 +125,9 @@ CompareSST <- function(zSST, azSST,
 		border=col, col=NA, pch=16, add=TRUE)
 	
 	# depending on statistic value
-	if(!is.null(wilcox)){
+	if(wilcox){
+		WT <- wilcox.test(zSST, azSST)
+
 		if(WT$p.value<1e-04){
 			text(0.6, 38, 
 				 label=bquote(italic(W)== .(WT$statistic) ~ ", " ~ italic(p) < 10^-4), 

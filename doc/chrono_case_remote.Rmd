@@ -1,5 +1,5 @@
 ---
-title: "Thermal niches of scleractinian corals in deep time - an example application for the chronosphere in R"
+title: "Thermal niches of scleractinian corals in deep time - an example application of the 'chronosphere' portal in R"
 author: "Ádám T. Kocsis, Paulina Nätscher & Nussaïbah B. Raja"
 date: "`r format(Sys.time(),'%Y-%m-%d')`"
 output: 
@@ -17,7 +17,7 @@ opts_knit$set(root.dir=normalizePath('../'),#set directory
 ) 
 ```
 
-# 1. Setting up the environment to work with the data
+# 1. Setting up the environment
 
 ## 1.1. R extension packages 
 
@@ -134,7 +134,7 @@ Before we can analyses the data, we will bin the data at stage level using our c
 printfunction("AssignStages")
 ```
 
-Note that this function is based on the manual accompanying the R package divDyn ($divDyn), and this snippet cannot assign occurrences from the Cambrian and Ordovician periods. 
+Note that this function is based on the manual accompanying the R package divDyn (`https://github.com/divDyn/ddPhanero`), and this snippet cannot assign occurrences from the Cambrian and Ordovician periods. 
 As scleractinian corals do not have Early Paleozoic record, they are not affected by this issue. 
 
 ```{r}
@@ -144,7 +144,7 @@ corals <- AssignStages(corals)
 
 We also remove all occurrences without any genus names and coordinates, as well as those that could not be assigned to a specific stage. 
 Additionally, we subset the data to include coral occurrences only from the Triassic onwards. 
-This is done using our custom function `CleanPBDB`:
+This is done using our custom function `CleanPBDB` that also includes additional taxonomic filtering. :
 
 ```{r clean_pbdb, echo=FALSE, results='asis'}
 printfunction("CleanPBDB")
@@ -171,13 +171,12 @@ collections <- collections[
 
 ## 2.4. Sea Surface Temperature (SST) data 
 
-For our analyses, we also need sea surface temperature (SSTs) data. 
-The following were computed by Valdes et al. (2017) using the HadCML3 climate models. 
-These were spatially interpolated to best match Paleobiology Database occurrence data (will be expanded later).
-
+For our analyses, we need sea surface temperature data, that were computed by Valdes et al. (2017) using the HadCML3 climate models. 
+**
 These are not yet added to the public library. 
 To reach these items, we have to connect to the private, TERSANE chronosphere library. 
 This can be achieved with the function below, that adjusts the address of the remote server.
+**
 
 ```{r useall, echo=FALSE, results='asis'}
 source("../misc/useall.R")
@@ -189,18 +188,27 @@ useall()
 tos <- fetch(dat="had-stage", var="tos-extra", res=1)
 ```
 
+These climate models were run using the PALEOMAP Paleodigital Elevation Models (Scotese and Wright, 2018), which were not calibrated to represent intervals of highest seastand.
+In order to have approximate average values of SSTs for all possibly valid collection coordinates, the original rasters (can be accessed with `fetch(dat="had-stage", var="tos")`) were interpolated with thin plate splines.
+This procedure takes relatively long, which is why this additional variable is added to the available datasets.
+Using Paleobiology Database occurrences, the implied coastlines were corrected to represent maximum transgression intervals, which were then used to mask the interpolated datasets.
+
+
 ## 2.5. Paleocoordinate reconstructions  
 
-Paleocoordinate reconstruction can be accomp accomplished in two way with the 'chronosphere' R package.
-We also need the rotation model for the coordinate reconstructions. **Note:** This example uses the offline reconstruction feature for Gplates. 
+Paleocoordinate reconstruction can be accomplished in two ways with the 'chronosphere' R package, via the GPlates Web Service or with the GPlates desktop application.
+In this example we will use the second approach, which requires the GPlates application, but is much better suited to larger datasets, and can be repeated without an internet connection (if the model files are saved with the `datadir` argument. 
+For this offline method, we will need the rotation model for the coordinate reconstructions. 
+To make the coordinates compatible with the climate model outputs we have to use the PALEOMAP rotation model developed by Christopher Scotese (Scotese and Wright, 2018).
 
 ```{r paleomap, message=FALSE}
 # download the rotation model
 mod <- fetch(dat="paleomap",var="model")
-
 ```
 
-To be able to use our SST data together with our genus occurrences, we will match the closest temperature layer available to each stage in our data. This is important as we have missing data for some stages and hence this allows us to get an approximate temperature reconstruction for those stages with missing data.This can be done using the `matchtime` function:
+To be able to use our SST data together with genus occurrences, we will match the closest temperature layer available to each stage in our data. 
+
+This can be done using the `matchtime` function:
 
 ```{r}
 # Order the TOS series
@@ -211,7 +219,8 @@ collections$mapage <- names(tosord)[collections$stg]
 
 ```
 
-We also reconstruct the coordinates of our genus occurrences using our specified model. While the PBDB already provide reconstructed paleocoordinates, we need to match the model used for reconstruction of the paleocoordinates to the temperature data to allow for maximum accuracy. 
+We also reconstruct the coordinates of our genus occurrences using our specified model. 
+Although it is possible to download occurrences directly with the Scotese-model using the API, with this method we can make sure that the target ages of the reconstructions best match the maps on which they are plotted.
 
 ```{r}
 # Offline reconstruction - might take a minute or two
@@ -224,24 +233,25 @@ collections <- cbind(collections, reconstructed)
 
 ```
 
-We can finally extra SST values for each collections. We also omit those occurrences without a corresponding SST value.
+At this stage you are welcome to compare the coordinates downloaded from the PBDB (`paleolat` and `paleolng`) and those reconstructed with GPLates (`plat` and `plng`). 
+
+After this step, we can finally extract SST values for each collection. We also omit occurrences without a corresponding SST value.
 
 ```{r}
 # extract the SST values
 collections$SST <- chronosphere::extract(tosord, collections, by="mapage")
 
+# record with no SST data
+bNoSST <- !is.na(collections$SST)
+sum(bNoSST)/length(bNoSST) # proportion remaining
+
 # omit everything with no SST data
-collSST <- collections[!is.na(collections$SST), ]
+collSST <- collections[bNoSST, ]
 
 ```
 
-```{r plot_sst, fig.width=10, fig.asp=0.67}
-plot(0,0, xlim=c(-180,180), ylim=c(-90,90), type="n", xaxs="i", yaxs="i")
-mapplot(tos["130"], add=TRUE)
-points(collSST[collSST$mapage==130, c("plng", "plat")],pch=16, col="black")
-```
+We can then add the SST values to our genus occurrences:
 
-We then add the SST values to our genus occurrences:
 ```{r}
 # remerge with occurrences
 corals <- merge(
@@ -251,48 +261,69 @@ corals <- merge(
 
 ```
 
-# Thermal niches of scleractinian corals
+# 3. Analysis of thermal niches
 
-Now that our data is in the right format, we can calculate the thermal niche of the zoothanthellate and azoothanthellate over time.
+Now that our data is in the right format, we can calculate the thermal niche of the zoothanthellate (Z) and azoothanthellate (AZ) over time. 
+We will separate the whole dataset to two subsets and define functions that calculate specific results from a subsets separately.
 
 ```{r}
-# compare Z with AZ corals
+# create subsets of Z and AZ corals
+# Z corals
 zCorals <- corals[corals$ECOLOGY=="z", ]
+nrow(zCorals) # Z occurrenes in total
+
+# AZ nd AP (Apozooxanthellate, facultatively symbiotic) corals)
 azCorals <- corals[corals$ECOLOGY=="az" | corals$ECOLOGY=="ap", ]
+nrow(azCorals) # Z occurrenes in total
 ```
 
-Spatial distribution can be plotted with this function:
+## 3.1. Thermal niches of the whole symbiotic groups
 
+The thermal ranges of the coral groups are expected to be largely influenced by their latitudinal range. This can be visualized by plotting the occurrences on the SST maps.
 
 Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[75], round(stages$top[75], 1), round(stages$bottom[75], 1))` stage:
-```{r, fig.width=12, fig.asp=0.5}
+```{r, fig.width=12, fig.asp=0.67}
 PlotMapWithRanges(zCorals, azCorals, i=75,zcol="#cc2f04", azcol="#0447cc", alpha=60)
 ```
 
 Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[93], round(stages$top[93], 1), round(stages$bottom[93], 1))` stage:
-```{r, fig.width=12, fig.asp=0.5}
+```{r, fig.width=12, fig.asp=0.67}
 PlotMapWithRanges(zCorals, azCorals, i=93,zcol="#cc2f04", azcol="#0447cc", alpha=60)
 
 ```
 
-Comparisons between the zoothanthellate and azoothanthellate corals show a significant difference between the two groups, with z-corals having a smaller temperature range than the az-corals. With this plotting function
+Looking at overall, bulk patterns, comparisons between the raw assigned temperature values of Z and AZ occurrence is expected to match present-day patterns that the two groups occupy habitats of different temperatures.
+Indeed, the medians SST values are different for the two groups, which can be confirmed by a Wilcoxon rank-sum test.
 
+```{b}
+median(zCorals$SST)
+median(azCorals$SST)
 
-```{r, fig.width=6, fig.asp=0.9}
-WT <- wilcox.test(zCorals$SST, azCorals$SST)
+wilcox.test(zCorals$SST, azCorals$SST)
+```
 
+Comparing the two groups in a boxplot also reveals, that Z-corals also have a smaller temperature range than the AZ-corals, despite their more extensive fossil record. 
+
+```{r box, fig.width=6, fig.asp=0.9}
 # function plots boxplots of z- and az-corals with the underlying distribution
 CompareSST(zSST=zCorals$SST, azSST= azCorals$SST,
-           col = pal, wilcox=WT)
+           col = pal)
 
 ```
 
-We can tabulate the median genus niche of a coral group with the following calculations
+The obvious question that follows from this pattern is how this evolved. In a previous analysis (Kiessling and Kocsis, 2015) it was already suggested that the environmental preference of the two groups diverged in the Cretaceous.
+
+
+## 3.2. Thermal niches of genera 
+
+
+We can tabulate the median genus niche of a coral group with the following function. 
+
 ```{r, results='asis', echo=FALSE}
 printfunction("GenusNiche")
 ```
 
-
+We can apply this to the 
 
 ```{r}
 # Genus median niche
@@ -300,14 +331,12 @@ allMedZ <- GenusNiche(zCorals)
 allMedAZ <- GenusNiche(azCorals)
 ```
 
-Which then can be plotted over time, using a standard geological time plot
-
+Which then can be plotted over time, using a standard geological time plot, such those featured in divDyn.
 
 
 ```{r}
 
 # time-specific occupied niche - heavilly affected by sampling
-# Plot for the SOM
 Tp(ylim=c(0,40),ylab=c("Sea Surface Temperature (C)"))
 LinesNiche(allMedZ, col=paste0(pal["z"], 55))
 LinesNiche(allMedAZ, col=paste0(pal["az"], 55))
@@ -355,8 +384,10 @@ We see a decrease in median thermal niche is observed since the Triassic, which 
 
 # References
 
-Kiessling and Kocsiss
+Kiessling, W., & Kocsis, Á. T. (2015). Biodiversity dynamics and environmental occupancy of fossil azooxanthellate and zooxanthellate scleractinian corals. Paleobiology, 41(3), 402–414.
 
-Kocsis et al.
+Kocsis, Á. T., Reddin, C. J., Alroy, J., & Kiessling, W. (2019). The R package divDyn for quantifying diversity dynamics using fossil sampling data. Methods in Ecology and Evolution, 10(5), 735–743. https://doi.org/10.1111/2041-210X.13161
 
-Valdes et al. 
+Scotese, C. R., & Wright, N. (2018). PALEOMAP Paleodigital Elevation Models (PaleoDEMS) for the Phanerozoic. https://www.earthbyte.org/paleodem-resource-scotese-and-wright-2018/
+
+Valdes, P. J., Armstrong, E., Badger, M. P. S., Bradshaw, C. D., Bragg, F., Davies-Barnard, T., Day, J. J., Farnsworth, A., Hopcroft, P. O., Kennedy, A. T., Lord, N. S., Lunt, D. J., Marzocchi, A., Parry, L. M., Roberts, W. H. G., Stone, E. J., Tourte, G. J. L., & Williams, J. H. T. (2017). The BRIDGE HadCM3 family of climate models: HadCM3@Bristol v1.0. Geoscientific Model Development, 10, 3715–3743.
