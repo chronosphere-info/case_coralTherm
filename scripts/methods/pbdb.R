@@ -1,4 +1,4 @@
-CleanPBDB<-function(dat){
+CleanPBDB <- function(dat){
 	# omit missing taxa
 	datNoNAGEN <- dat[!is.na(dat$genus.proper), ]
 

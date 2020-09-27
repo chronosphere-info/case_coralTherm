@@ -142,6 +142,6 @@ CompareSST <- function(zSST, azSST,
 
 #' @param name The name of the plot
 #' @param path Where the plot should be put.
-savepdf<- function(name, path="export/", ...){
+savepdf <- function(name, path="export/", ...){
 	pdf(file.path(path, name), ...)
 }

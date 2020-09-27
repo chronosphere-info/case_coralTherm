@@ -1,9 +1,9 @@
 ---
-title: "Example application for the chronosphere package"
+title: "Thermal niches of scleractinian corals in deep time - an example application for the chronosphere in R"
 author: "Ádám T. Kocsis, Paulina Nätscher & Nussaïbah B. Raja"
 date: "`r format(Sys.time(),'%Y-%m-%d')`"
 output: 
-  html_document: default
+  pdf_document: default
   github_document:
     html_preview: false
     toc: true
@@ -13,15 +13,15 @@ output:
 ```{r setup, include=FALSE}
 library(knitr)
 opts_knit$set(root.dir=normalizePath('../'),#set directory
-              tidy.opts=list(width.cutoff=80), tidy=TRUE #wrap long lines
+              tidy.opts=list(width.cutoff=80), tidy=TRUE #wrap long lines            
 ) 
 ```
 
 # 1. Setting up the environment to work with the data
 
-## Libraries
+## 1.1. R extension packages 
 
-This example uses the chronosphere R package to download data.
+This example uses the 'chronosphere' R package to download data, and the 'divDyn' R package (Kocsis et al., 2019) to process and plot the results.
 
 ```{r libraries and functions, message=FALSE, warning=FALSE}
 # libraries
@@ -38,52 +38,87 @@ allDat <- datasets()
 head(allDat[,1:3])
 ```
 
-The loading functions downloaded from the chronosphere might need some additional packages. These packages do not have to be attached to the workspace, but they have to be present on the system. The spatial temperature data used in this example are dependent on the 'ncdf4' package, that helps in reading in netcdf binaries as rasters. If you do not have this package on your system, the download call will result in an error message. 
+The loading functions downloaded from the 'chronosphere' servers might need some additional packages. 
+These do not have to be attached to the workspace, but they must be present on the system, or the download call will result in an error message, pointing to which package you are missing. 
+The spatial temperature data used in this example are dependent on the 'ncdf4' package, which includes methods that read in netcdf binaries as rasters. 
+If you do not have this package on your system, you can install it from the CRAN with: 
 
-```{r ncdf, echo=TRUE}
+```{r ncdf, echo=TRUE, eval=FALSE}
 install.packages("ncdf4")
 ``` 
 
 
-## Custom functions
+## 1.2. Analytical functions
 
-Data transformation and analytical functions will be shown here, but printing all procedures in this document would make it very technical and cluttered. All functions used in this example can be found on its dedicated GitHub repository ($github), and can be loaded with these simple calls that download and read them to the R workspace. 
+Data transformation and analytical functions will be shown here, but printing all procedures in this document would make it very technical and cluttered. 
+All functions used in this example can be found on its dedicated GitHub repository (`https://github.com/chronosphere-portal/case_coralTherm`), and can be loaded with these simple calls that download and read them to the R workspace. 
+If you are interested in what a particular function is doing, type its name into the console.
 
 ```{r funct}
-# functions to clean, transform and maniuplate PBDB data
-source("pbdb.R")
+# functions to clean, transform and manipulate PBDB data
+source("https://github.com/chronosphere-portal/case_coralTherm/raw/master/scripts/methods/pbdb.R")
 
 # functions that calculate new variables using the data
-source("analysis.R")
+source("https://github.com/chronosphere-portal/case_coralTherm/raw/master/scripts/methods/analysis.R")
 
-# functions that plot
-source("plots.R")
+# functions that plot results
+source("https://github.com/chronosphere-portal/case_coralTherm/raw/master/scripts/methods/plots.R")
 ```
 
 ```{r functionsielnt, echo=FALSE}
-# functions to clean, transform and maniuplate PBDB data
-source("utils.R")
+# function printing where necessary
+source("https://github.com/chronosphere-portal/case_coralTherm/raw/master/scripts/methods/utils.R")
 ```
 
-# Data
+# 2. Data download and processing
 
-## The Paleobiology Database (PBDB)
+## 2.1. The Paleobiology Database (PBDB)
 
-The following code downloads PBDB data directly from the `chronosphere` package. 
+The following code downloads PBDB data directly from the `chronosphere` servers. 
+The most up-to-date version of these datasets are downloaded by default. 
+The default variable (`var="occ"`) covers all data in the Ediacaran-Holocene interval. 
 
-```{r get_pbdb, message=FALSE, warning=FALSE}
+```{r get_pbdb, message=FALSE}
 pbdb <- fetch(dat="pbdb") #PBDB data
-traits <- fetch(dat="som", var="kiessling-coralgenera") #coral traits data
 ```
 
-The most up-to-date version of these datasets are downloaded by default. Setting the `datadir` argument of the `fetch()` function to a valid directory saves the downloaded data in a specific folder on your computer. These can can be loaded again in the future without an internet connections and also ensures that the same data are used everytime the analyses are run.
+The backend of 'chronosphere' will try to get a daily copy of the PBDB every day. 
+Upon download, you are indicated to acknowledge the database in your publication if you use the data. 
+Objects downloaded from the 'chronosphere' get some basic information appended to them as attributes. 
+These can be used for get further information, such as the exact version of the download (`ver`) the access date, or the API call used to get the download from the database (`API`). 
 
-We then subset the `corals` `data.frame` and assign the ecological traits to the coral genera.
+```{r pbdb_att, message=FALSE}
+# list attributes
+names(attributes(pbdb)$chronosphere)
+
+# date of access with API
+attributes(pbdb)$chronosphere$accessDate
+```
+
+You can set the `datadir` argument of the `fetch()` function to a valid directory, while would save the downloaded data in a specific directory on your computer. 
+These can can be loaded again in the future without an internet connection and it also ensures that the same data are used everytime the analyses are run.
+
+In this example, we will be working with occurrrences data of scleractinian corals.
 
 ```{r corals}
 #subset for scleractinian corals only
 corals <- pbdb[pbdb$order =="Scleractinia",] #only scleractinia
+```
 
+## 2.2. Traits of fossil scleractinian genera
+
+These raw occurrences can be processed further merged and merged trait information which was used earlier in Kiessling and Kocsis (2015), about the diversity dynamics of coral genera. 
+The raw data-table used for this analysis is added to the the supplementary data-subset of the chronosphere. 
+Unlike other big databases, this (`dat="som"`) contains a variety of smaller datasets (variables) that were published as Supplementary Online Material. 
+
+```{r get_traits, message=FALSE}
+traits <- fetch(dat="som", var="kiessling-coralgenera") #coral traits data
+```
+
+This `data.frame` objects indicate how occurrence names in the PBDB ('genus_detail') match with a validated lists of genus names ('genus_proper'). 
+We can use this list to merge the pbdb with trait data, and treat the two symbiotic groups separately. 
+
+```{r coralsmerge}
 # assign the symbiotic status
 corals <- merge(
   corals, 
@@ -92,19 +127,24 @@ corals <- merge(
 
 ```
 
+## 2.3. Stratigraphic assignment and further cleaning
+
 Before we can analyses the data, we will bin the data at stage level using our custom function `AssignStages()`:
 ```{r assign_stages, echo=FALSE, results='asis'}
 printfunction("AssignStages")
 ```
 
-Note that this function is based on the manual accompanying the R package divDyn ($divDyn), and this snippet cannot assign occurrences from the Cambrian and Ordovician periods. As scleractinian corals do not have Early Paleozoic record, they are not affected by this issue. 
+Note that this function is based on the manual accompanying the R package divDyn ($divDyn), and this snippet cannot assign occurrences from the Cambrian and Ordovician periods. 
+As scleractinian corals do not have Early Paleozoic record, they are not affected by this issue. 
 
 ```{r}
 # Assign stage to PBDB entries
 corals <- AssignStages(corals)
 ```
 
-We also remove all occurrences without any genus names and coordinates, as well as those that could not be assigned to a specific stage. Additionally, we subset the data to include coral occurrences only from the Triassic onwards. This is done using our custom function `CleanPBDB`:
+We also remove all occurrences without any genus names and coordinates, as well as those that could not be assigned to a specific stage. 
+Additionally, we subset the data to include coral occurrences only from the Triassic onwards. 
+This is done using our custom function `CleanPBDB`:
 
 ```{r clean_pbdb, echo=FALSE, results='asis'}
 printfunction("CleanPBDB")
@@ -129,11 +169,15 @@ collections <- collections[
 
 ```
 
-## Spatial data and reconstruction
+## 2.4. Sea Surface Temperature (SST) data 
 
-For our analyses, we also need sea surface temperature (SSTs) data. The following were computed by Valdes et al. (in prep) using the HadCML3 climate models. These were spatially extrapolated to best match Paleobiology Database occurrence data (will be expanded later).
+For our analyses, we also need sea surface temperature (SSTs) data. 
+The following were computed by Valdes et al. (2017) using the HadCML3 climate models. 
+These were spatially interpolated to best match Paleobiology Database occurrence data (will be expanded later).
 
-These are not yet added to the public library and so we have to connect to the private, TERSANE chronosphere library. This can be achieved with the function below, that adjusts the address of the remote server.
+These are not yet added to the public library. 
+To reach these items, we have to connect to the private, TERSANE chronosphere library. 
+This can be achieved with the function below, that adjusts the address of the remote server.
 
 ```{r useall, echo=FALSE, results='asis'}
 source("../misc/useall.R")
@@ -145,9 +189,12 @@ useall()
 tos <- fetch(dat="had-stage", var="tos-extra", res=1)
 ```
 
-We also need the rotation model for the coordinate reconstructions. **Note:** This example uses the offline reconstruction feature for Gplates. See Offline reconstruction for more information.
+## 2.5. Paleocoordinate reconstructions  
 
-```{r paleomap}
+Paleocoordinate reconstruction can be accomp accomplished in two way with the 'chronosphere' R package.
+We also need the rotation model for the coordinate reconstructions. **Note:** This example uses the offline reconstruction feature for Gplates. 
+
+```{r paleomap, message=FALSE}
 # download the rotation model
 mod <- fetch(dat="paleomap",var="model")
 
@@ -306,3 +353,10 @@ lines(stages[names(meanAZ), "mid"], meanAZ, col=pal["az"], lwd=5)
 
 We see a decrease in median thermal niche is observed since the Triassic, which could be the result of sampling. Interestingly, a divergence in thermal niche is also seen from the early to mid Cretaceous. 
 
+# References
+
+Kiessling and Kocsiss
+
+Kocsis et al.
+
+Valdes et al. 

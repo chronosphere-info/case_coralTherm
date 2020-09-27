@@ -10,8 +10,10 @@ funky <- function(path="scripts/methods/"){
 #' @param f Function name to be displayed (characters)
 #' @param path Where the function files are, folder
 # THe only restriction is that the function and assignment have to be on the same line, and the function definition
-# has to end with } - no one-line functions!
-printfunction<-function(f, path="scripts/methods/"){
+# has to end with } - no one-line functions, and add a space at the end of the function name, before the <-!
+printfunction <- function(f, path="scripts/methods/"){
+	# name
+	f <- paste0(f, " ")
 
 	# read everything
 	all <- list.files(path)
@@ -101,7 +103,7 @@ printfunction<-function(f, path="scripts/methods/"){
 	for(i in 1:length(b)) cat(b[i],"\n")
 }
 
-printUseall<- function(path="../misc/useall.R"){
+printUseall <- function(path="../misc/useall.R"){
 	a <-readLines(path)
 	a <- c("```r", a, "```")
 	for(i in 1:length(a)) cat(a[i],"\n")
