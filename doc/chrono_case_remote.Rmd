@@ -1,0 +1,308 @@
+---
+title: "Example application for the chronosphere package"
+author: "Ádám T. Kocsis, Paulina Nätscher & Nussaïbah B. Raja"
+date: "`r format(Sys.time(),'%Y-%m-%d')`"
+output: 
+  html_document: default
+  github_document:
+    html_preview: false
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_knit$set(root.dir=normalizePath('../'),#set directory
+              tidy.opts=list(width.cutoff=80), tidy=TRUE #wrap long lines
+) 
+```
+
+# 1. Setting up the environment to work with the data
+
+## Libraries
+
+This example uses the chronosphere R package to download data.
+
+```{r libraries and functions, message=FALSE, warning=FALSE}
+# libraries
+library(chronosphere)
+library(divDyn)
+```
+
+You can use the `datasets()` function to see which datasets are available *publicly* in the chronosphere library.
+
+```{r datasets}
+# datasets table from chronosphere
+allDat <- datasets()
+
+head(allDat[,1:3])
+```
+
+The loading functions downloaded from the chronosphere might need some additional packages. These packages do not have to be attached to the workspace, but they have to be present on the system. The spatial temperature data used in this example are dependent on the 'ncdf4' package, that helps in reading in netcdf binaries as rasters. If you do not have this package on your system, the download call will result in an error message. 
+
+```{r ncdf, echo=TRUE}
+install.packages("ncdf4")
+``` 
+
+
+## Custom functions
+
+Data transformation and analytical functions will be shown here, but printing all procedures in this document would make it very technical and cluttered. All functions used in this example can be found on its dedicated GitHub repository ($github), and can be loaded with these simple calls that download and read them to the R workspace. 
+
+```{r funct}
+# functions to clean, transform and maniuplate PBDB data
+source("pbdb.R")
+
+# functions that calculate new variables using the data
+source("analysis.R")
+
+# functions that plot
+source("plots.R")
+```
+
+```{r functionsielnt, echo=FALSE}
+# functions to clean, transform and maniuplate PBDB data
+source("utils.R")
+```
+
+# Data
+
+## The Paleobiology Database (PBDB)
+
+The following code downloads PBDB data directly from the `chronosphere` package. 
+
+```{r get_pbdb, message=FALSE, warning=FALSE}
+pbdb <- fetch(dat="pbdb") #PBDB data
+traits <- fetch(dat="som", var="kiessling-coralgenera") #coral traits data
+```
+
+The most up-to-date version of these datasets are downloaded by default. Setting the `datadir` argument of the `fetch()` function to a valid directory saves the downloaded data in a specific folder on your computer. These can can be loaded again in the future without an internet connections and also ensures that the same data are used everytime the analyses are run.
+
+We then subset the `corals` `data.frame` and assign the ecological traits to the coral genera.
+
+```{r corals}
+#subset for scleractinian corals only
+corals <- pbdb[pbdb$order =="Scleractinia",] #only scleractinia
+
+# assign the symbiotic status
+corals <- merge(
+  corals, 
+  unique(traits[, c("genus_detail", "genus.proper", "ECOLOGY")]), 
+  by.x="genus", by.y="genus_detail", all.x=TRUE)
+
+```
+
+Before we can analyses the data, we will bin the data at stage level using our custom function `AssignStages()`:
+```{r assign_stages, echo=FALSE, results='asis'}
+printfunction("AssignStages")
+```
+
+Note that this function is based on the manual accompanying the R package divDyn ($divDyn), and this snippet cannot assign occurrences from the Cambrian and Ordovician periods. As scleractinian corals do not have Early Paleozoic record, they are not affected by this issue. 
+
+```{r}
+# Assign stage to PBDB entries
+corals <- AssignStages(corals)
+```
+
+We also remove all occurrences without any genus names and coordinates, as well as those that could not be assigned to a specific stage. Additionally, we subset the data to include coral occurrences only from the Triassic onwards. This is done using our custom function `CleanPBDB`:
+
+```{r clean_pbdb, echo=FALSE, results='asis'}
+printfunction("CleanPBDB")
+```
+
+```{r}
+# Assign stage to PBDB entries
+corals <- CleanPBDB(corals)
+```
+
+We also omit collections for which no coordinates were available or those that could not be assigned a stage. 
+```{r}
+# separate the collection data
+collections <- corals[,c("collection_no", "lng", "lat", "stg", "paleolat" ,"paleolng")]
+collections <- unique(collections)
+
+# omit cases where something is missing
+collections <- collections[
+  !is.na(collections$stg) & 
+  !is.na(collections$lng) & 
+  !is.na(collections$lat), ]
+
+```
+
+## Spatial data and reconstruction
+
+For our analyses, we also need sea surface temperature (SSTs) data. The following were computed by Valdes et al. (in prep) using the HadCML3 climate models. These were spatially extrapolated to best match Paleobiology Database occurrence data (will be expanded later).
+
+These are not yet added to the public library and so we have to connect to the private, TERSANE chronosphere library. This can be achieved with the function below, that adjusts the address of the remote server.
+
+```{r useall, echo=FALSE, results='asis'}
+source("../misc/useall.R")
+printUseall("../misc/useall.R")
+```
+
+```{r sst, warning=FALSE, message=FALSE}
+useall()
+tos <- fetch(dat="had-stage", var="tos-extra", res=1)
+```
+
+We also need the rotation model for the coordinate reconstructions. **Note:** This example uses the offline reconstruction feature for Gplates. See Offline reconstruction for more information.
+
+```{r paleomap}
+# download the rotation model
+mod <- fetch(dat="paleomap",var="model")
+
+```
+
+To be able to use our SST data together with our genus occurrences, we will match the closest temperature layer available to each stage in our data. This is important as we have missing data for some stages and hence this allows us to get an approximate temperature reconstruction for those stages with missing data.This can be done using the `matchtime` function:
+
+```{r}
+# Order the TOS series
+tosord <- matchtime(tos, stages$mid)
+
+# assign a reconstruction to every collection
+collections$mapage <- names(tosord)[collections$stg]
+
+```
+
+We also reconstruct the coordinates of our genus occurrences using our specified model. While the PBDB already provide reconstructed paleocoordinates, we need to match the model used for reconstruction of the paleocoordinates to the temperature data to allow for maximum accuracy. 
+
+```{r}
+# Offline reconstruction - might take a minute or two
+reconstructed <- reconstruct(collections[, c("lng", "lat")], 
+                             age=collections[, "mapage"], enumerate=FALSE, model = mod)
+
+# bind the new coordinates to the previous
+colnames(reconstructed) <- c("plng", "plat")
+collections <- cbind(collections, reconstructed)
+
+```
+
+We can finally extra SST values for each collections. We also omit those occurrences without a corresponding SST value.
+
+```{r}
+# extract the SST values
+collections$SST <- chronosphere::extract(tosord, collections, by="mapage")
+
+# omit everything with no SST data
+collSST <- collections[!is.na(collections$SST), ]
+
+```
+
+```{r plot_sst, fig.width=10, fig.asp=0.67}
+plot(0,0, xlim=c(-180,180), ylim=c(-90,90), type="n", xaxs="i", yaxs="i")
+mapplot(tos["130"], add=TRUE)
+points(collSST[collSST$mapage==130, c("plng", "plat")],pch=16, col="black")
+```
+
+We then add the SST values to our genus occurrences:
+```{r}
+# remerge with occurrences
+corals <- merge(
+  corals, 
+  collSST[, c("collection_no", "plat", "plng", "SST", "mapage")], 
+  by="collection_no")
+
+```
+
+# Thermal niches of scleractinian corals
+
+Now that our data is in the right format, we can calculate the thermal niche of the zoothanthellate and azoothanthellate over time.
+
+```{r}
+# compare Z with AZ corals
+zCorals <- corals[corals$ECOLOGY=="z", ]
+azCorals <- corals[corals$ECOLOGY=="az" | corals$ECOLOGY=="ap", ]
+```
+
+Spatial distribution can be plotted with this function:
+
+
+Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[75], round(stages$top[75], 1), round(stages$bottom[75], 1))` stage:
+```{r, fig.width=12, fig.asp=0.5}
+PlotMapWithRanges(zCorals, azCorals, i=75,zcol="#cc2f04", azcol="#0447cc", alpha=60)
+```
+
+Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[93], round(stages$top[93], 1), round(stages$bottom[93], 1))` stage:
+```{r, fig.width=12, fig.asp=0.5}
+PlotMapWithRanges(zCorals, azCorals, i=93,zcol="#cc2f04", azcol="#0447cc", alpha=60)
+
+```
+
+Comparisons between the zoothanthellate and azoothanthellate corals show a significant difference between the two groups, with z-corals having a smaller temperature range than the az-corals. With this plotting function
+
+
+```{r, fig.width=6, fig.asp=0.9}
+WT <- wilcox.test(zCorals$SST, azCorals$SST)
+
+# function plots boxplots of z- and az-corals with the underlying distribution
+CompareSST(zSST=zCorals$SST, azSST= azCorals$SST,
+           col = pal, wilcox=WT)
+
+```
+
+We can tabulate the median genus niche of a coral group with the following calculations
+```{r, results='asis', echo=FALSE}
+printfunction("GenusNiche")
+```
+
+
+
+```{r}
+# Genus median niche
+allMedZ <- GenusNiche(zCorals)
+allMedAZ <- GenusNiche(azCorals)
+```
+
+Which then can be plotted over time, using a standard geological time plot
+
+
+
+```{r}
+
+# time-specific occupied niche - heavilly affected by sampling
+# Plot for the SOM
+Tp(ylim=c(0,40),ylab=c("Sea Surface Temperature (C)"))
+LinesNiche(allMedZ, col=paste0(pal["z"], 55))
+LinesNiche(allMedAZ, col=paste0(pal["az"], 55))
+```
+
+Assuming niche conservatism, i.e. that the individual genus did not change its thermal niche over time, we calculate the median thermal niche per genera over time. This can be calculated with the following function
+```{r, results='asis', echo=FALSE}
+printfunction("GenusNicheOverTime")
+```
+
+
+
+```{r}
+# Calculate the median niche of the genus with its FAD and LAD
+flZ <- GenusNicheOverTime(zCorals)
+flAZ <- GenusNicheOverTime(azCorals)
+
+Tp(ylim=c(0,40), ylab=expression("Sea Surface Temperature ("*~degree*C*")"))
+segments(
+  x0=stages$mid[flZ$FAD], 
+  x1=stages$mid[flZ$LAD], 
+  y0=flZ$var, 
+  y1=flZ$var, 
+  col=paste0(pal["z"], 22), 
+  lwd=2)
+segments(
+  x0=stages$mid[flAZ$FAD], 
+  x1=stages$mid[flAZ$LAD], 
+  y0=flAZ$var,
+  y1=flAZ$var, 
+  col=paste0(pal["az"], 22),
+  lwd=2)
+
+
+meanZ<- MeanOverTime(flZ)
+meanAZ <- MeanOverTime(flAZ)
+
+lines(stages[names(meanZ), "mid"], meanZ, col=pal["z"], lwd=5)
+lines(stages[names(meanAZ), "mid"], meanAZ, col=pal["az"], lwd=5)
+
+
+```
+
+We see a decrease in median thermal niche is observed since the Triassic, which could be the result of sampling. Interestingly, a divergence in thermal niche is also seen from the early to mid Cretaceous. 
+
