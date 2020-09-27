@@ -107,22 +107,23 @@ corals <- pbdb[pbdb$order =="Scleractinia",] #only scleractinia
 
 ## 2.2. Traits of fossil scleractinian genera
 
-These raw occurrences can be processed further merged and merged trait information which was used earlier in Kiessling and Kocsis (2015), about the diversity dynamics of coral genera. 
-The raw data-table used for this analysis is added to the the supplementary data-subset of the chronosphere. 
+These raw occurrences can be processed further and merged with trait information, which was used earlier in Kiessling and Kocsis (2015) about the diversity dynamics of coral genera. 
+The raw data-table used for this analysis is added to the 'chronosphere'. 
 Unlike other big databases, this (`dat="som"`) contains a variety of smaller datasets (variables) that were published as Supplementary Online Material. 
+
 
 ```{r get_traits, message=FALSE}
 traits <- fetch(dat="som", var="kiessling-coralgenera") #coral traits data
 ```
 
-This `data.frame` objects indicate how occurrence names in the PBDB ('genus_detail') match with a validated lists of genus names ('genus_proper'). 
+This `data.frame` object contains how occurrence names in the PBDB ('genus_detail') match with a validated lists of genus names ('genus_proper'). 
 We can use this list to merge the pbdb with trait data, and treat the two symbiotic groups separately. 
 
 ```{r coralsmerge}
 # assign the symbiotic status
 corals <- merge(
-  corals, 
-  unique(traits[, c("genus_detail", "genus.proper", "ECOLOGY")]), 
+  corals, # PBDB occurrences
+  unique(traits[, c("genus_detail", "genus.proper", "ECOLOGY")]),  # only the genus and ECOLOGY traits
   by.x="genus", by.y="genus_detail", all.x=TRUE)
 
 ```
@@ -134,7 +135,8 @@ Before we can analyses the data, we will bin the data at stage level using our c
 printfunction("AssignStages")
 ```
 
-Note that this function is based on the manual accompanying the R package divDyn (`https://github.com/divDyn/ddPhanero`), and this snippet cannot assign occurrences from the Cambrian and Ordovician periods. 
+Note that this function is based on the manual (`https://github.com/divDyn/ddPhanero`) accompanying the R divDyn package. 
+This snippet cannot assign occurrences from the Cambrian and Ordovician periods. 
 As scleractinian corals do not have Early Paleozoic record, they are not affected by this issue. 
 
 ```{r}
@@ -144,7 +146,7 @@ corals <- AssignStages(corals)
 
 We also remove all occurrences without any genus names and coordinates, as well as those that could not be assigned to a specific stage. 
 Additionally, we subset the data to include coral occurrences only from the Triassic onwards. 
-This is done using our custom function `CleanPBDB` that also includes additional taxonomic filtering. :
+This is done using our custom function `CleanPBDB()` that also includes additional taxonomic filtering. :
 
 ```{r clean_pbdb, echo=FALSE, results='asis'}
 printfunction("CleanPBDB")
@@ -172,6 +174,7 @@ collections <- collections[
 ## 2.4. Sea Surface Temperature (SST) data 
 
 For our analyses, we need sea surface temperature data, that were computed by Valdes et al. (2017) using the HadCML3 climate models. 
+
 **
 These are not yet added to the public library. 
 To reach these items, we have to connect to the private, TERSANE chronosphere library. 
@@ -191,7 +194,7 @@ tos <- fetch(dat="had-stage", var="tos-extra", res=1)
 These climate models were run using the PALEOMAP Paleodigital Elevation Models (Scotese and Wright, 2018), which were not calibrated to represent intervals of highest seastand.
 In order to have approximate average values of SSTs for all possibly valid collection coordinates, the original rasters (can be accessed with `fetch(dat="had-stage", var="tos")`) were interpolated with thin plate splines.
 This procedure takes relatively long, which is why this additional variable is added to the available datasets.
-Using Paleobiology Database occurrences, the implied coastlines were corrected to represent maximum transgression intervals, which were then used to mask the interpolated datasets.
+Using Paleobiology Database occurrences, the implied coastlines were corrected to represent maximum transgression intervals (Kocsis and Scotese, Under Review), which were then used to mask the interpolated rasters.
 
 
 ## 2.5. Paleocoordinate reconstructions  
@@ -208,7 +211,7 @@ mod <- fetch(dat="paleomap",var="model")
 
 To be able to use our SST data together with genus occurrences, we will match the closest temperature layer available to each stage in our data. 
 
-This can be done using the `matchtime` function:
+This can be done using the `matchtime()` function:
 
 ```{r}
 # Order the TOS series
@@ -241,7 +244,7 @@ After this step, we can finally extract SST values for each collection. We also 
 # extract the SST values
 collections$SST <- chronosphere::extract(tosord, collections, by="mapage")
 
-# record with no SST data
+# records with SST data
 bNoSST <- !is.na(collections$SST)
 sum(bNoSST)/length(bNoSST) # proportion remaining
 
@@ -264,7 +267,7 @@ corals <- merge(
 # 3. Analysis of thermal niches
 
 Now that our data is in the right format, we can calculate the thermal niche of the zoothanthellate (Z) and azoothanthellate (AZ) over time. 
-We will separate the whole dataset to two subsets and define functions that calculate specific results from a subsets separately.
+We will separate the whole dataset to two subsets and define functions that calculate specific results separately from a subset.
 
 ```{r}
 # create subsets of Z and AZ corals
@@ -282,20 +285,20 @@ nrow(azCorals) # Z occurrenes in total
 The thermal ranges of the coral groups are expected to be largely influenced by their latitudinal range. This can be visualized by plotting the occurrences on the SST maps.
 
 Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[75], round(stages$top[75], 1), round(stages$bottom[75], 1))` stage:
-```{r, fig.width=12, fig.asp=0.67}
+```{r, fig.width=12, fig.asp=0.6}
 PlotMapWithRanges(zCorals, azCorals, i=75,zcol="#cc2f04", azcol="#0447cc", alpha=60)
 ```
 
-Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[93], round(stages$top[93], 1), round(stages$bottom[93], 1))` stage:
-```{r, fig.width=12, fig.asp=0.67}
+Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[93], round(stages$top[93], 1), round(stages$bottom[93], 1))` epoch:
+```{r, fig.width=12, fig.asp=0.6}
 PlotMapWithRanges(zCorals, azCorals, i=93,zcol="#cc2f04", azcol="#0447cc", alpha=60)
 
 ```
 
 Looking at overall, bulk patterns, comparisons between the raw assigned temperature values of Z and AZ occurrence is expected to match present-day patterns that the two groups occupy habitats of different temperatures.
-Indeed, the medians SST values are different for the two groups, which can be confirmed by a Wilcoxon rank-sum test.
+Indeed, the median SST values are different for the two groups, which can be confirmed by a Wilcoxon rank-sum test.
 
-```{b}
+```{r}
 median(zCorals$SST)
 median(azCorals$SST)
 
@@ -306,24 +309,23 @@ Comparing the two groups in a boxplot also reveals, that Z-corals also have a sm
 
 ```{r box, fig.width=6, fig.asp=0.9}
 # function plots boxplots of z- and az-corals with the underlying distribution
-CompareSST(zSST=zCorals$SST, azSST= azCorals$SST,
-           col = pal)
+CompareSST(zSST=zCorals$SST, azSST= azCorals$SST, col = pal)
 
 ```
 
 The obvious question that follows from this pattern is how this evolved. In a previous analysis (Kiessling and Kocsis, 2015) it was already suggested that the environmental preference of the two groups diverged in the Cretaceous.
 
-
 ## 3.2. Thermal niches of genera 
 
-
-We can tabulate the median genus niche of a coral group with the following function. 
+We can tabulate the median genus niche in a coral group with the following function. 
 
 ```{r, results='asis', echo=FALSE}
 printfunction("GenusNiche")
 ```
 
-We can apply this to the 
+The output fo this function is a genus by time bin matrix, where each element represents the median occupied SST values of each genus in a time bin.
+
+This can be applied to the subsets representing different symbiotic groups.
 
 ```{r}
 # Genus median niche
@@ -331,8 +333,7 @@ allMedZ <- GenusNiche(zCorals)
 allMedAZ <- GenusNiche(azCorals)
 ```
 
-Which then can be plotted over time, using a standard geological time plot, such those featured in divDyn.
-
+This can be plotted over time, using a standard geological time plot (such as the `tsplot()` featured in divDyn, simplified here for clarity) and a custom plotting function (`LinesNiche()`) that draws a line for every coral genus in the SST dimension, using a given color. The `pal` object includes the predefined colors for the two groups.
 
 ```{r}
 
@@ -341,6 +342,9 @@ Tp(ylim=c(0,40),ylab=c("Sea Surface Temperature (C)"))
 LinesNiche(allMedZ, col=paste0(pal["z"], 55))
 LinesNiche(allMedAZ, col=paste0(pal["az"], 55))
 ```
+
+
+
 
 Assuming niche conservatism, i.e. that the individual genus did not change its thermal niche over time, we calculate the median thermal niche per genera over time. This can be calculated with the following function
 ```{r, results='asis', echo=FALSE}
