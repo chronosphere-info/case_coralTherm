@@ -113,16 +113,16 @@ CompareSST <- function(zSST, azSST, col, wilcox=TRUE){
 			 xaxs="i", yaxs="i")
 	
 	points(x=runif(length(unique(zCorals$SST)), 0.6, 1.4), y=unique(zCorals$SST),
-				 pch=16, cex=0.8, col=paste0("#cc2f04", 10))
+				 pch=16, cex=0.8, col=paste0(col["z"], 10))
 	points(x=runif(length(unique(azCorals$SST)), 1.6, 2.4), y=unique(azCorals$SST),
-				 pch=16, cex=0.8, col=paste0("#013a94", 10))
+				 pch=16, cex=0.8, col=paste0(col["az"], 10))
 	
 	# median difference (Figure 2.)
 	boxplot(
 		list("z-corals"=zSST, "az-corals"=azSST),
 		names=c("Z-corals", "AZ-corals"),
 		lwd=1.2,lty=1,
-		border=col, col=NA, pch=16, add=TRUE)
+		border=col[c("z", "az")], col=NA, pch=16, add=TRUE)
 	
 	# depending on statistic value
 	if(wilcox){

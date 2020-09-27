@@ -286,12 +286,12 @@ The thermal ranges of the coral groups are expected to be largely influenced by 
 
 Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[75], round(stages$top[75], 1), round(stages$bottom[75], 1))` stage:
 ```{r, fig.width=12, fig.asp=0.6}
-PlotMapWithRanges(zCorals, azCorals, i=75,zcol="#cc2f04", azcol="#0447cc", alpha=60)
+PlotMapWithRanges(zCorals, azCorals, i=75,zcol=pal["z"], azcol=pal["az"], alpha=60)
 ```
 
 Ranges of zoothanthellate and azoothanthellate corals for the `r sprintf("%s (%g - %g Ma)", stages$stage[93], round(stages$top[93], 1), round(stages$bottom[93], 1))` epoch:
 ```{r, fig.width=12, fig.asp=0.6}
-PlotMapWithRanges(zCorals, azCorals, i=93,zcol="#cc2f04", azcol="#0447cc", alpha=60)
+PlotMapWithRanges(zCorals, azCorals, i=93,zcol="pal["z"], azcol=pal["az"], alpha=60)
 
 ```
 
