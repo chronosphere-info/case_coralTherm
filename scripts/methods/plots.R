@@ -1,4 +1,4 @@
-pal <- c(az="#cc2f04", z="#013a94")
+pal <- c(a="#cc2f04", az="#013a94")
 
 # Uniform function for time series
 Tp <- function(...){

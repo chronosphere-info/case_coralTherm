@@ -75,11 +75,11 @@ source("https://github.com/chronosphere-portal/case_coralTherm/raw/master/script
 ## 2.1. The Paleobiology Database (PBDB)
 
 The following code downloads PBDB data directly from the `chronosphere` servers. 
-The most up-to-date version of these datasets are downloaded by default. 
+The most up-to-date version of these datasets are downloaded by default, but the version can be specified manually.
 The default variable (`var="occ"`) covers all data in the Ediacaran-Holocene interval. 
 
 ```{r get_pbdb, message=FALSE}
-pbdb <- fetch(dat="pbdb") #PBDB data
+pbdb <- fetch(dat="pbdb", ver="20200928") #PBDB data
 ```
 
 The backend of 'chronosphere' will try to get a daily copy of the PBDB every day. 
@@ -113,7 +113,7 @@ Unlike other big databases, this (`dat="som"`) contains a variety of smaller dat
 
 
 ```{r get_traits, message=FALSE}
-traits <- fetch(dat="som", var="kiessling-coralgenera") #coral traits data
+traits <- fetch(dat="som", var="kiessling-coralgenera", ver="0.54") #coral traits data
 ```
 
 This `data.frame` object contains how occurrence names in the PBDB ('genus_detail') match with a validated lists of genus names ('genus_proper'). 
@@ -181,7 +181,7 @@ printUseall("../misc/useall.R")
 
 ```{r sst, warning=FALSE, message=FALSE}
 useall()
-tos <- fetch(dat="had-stage", var="tos-extra", res=1)
+tos <- fetch(dat="had-stage", var="tos-extra", res=1, ver="20200407")
 ```
 
 These climate models were run using the PALEOMAP Paleodigital Elevation Models (Scotese and Wright, 2018), which were not calibrated to represent intervals of highest seastand.
@@ -199,7 +199,7 @@ To make the coordinates compatible with the climate model outputs we have to use
 
 ```{r paleomap, message=FALSE}
 # download the rotation model
-mod <- fetch(dat="paleomap",var="model")
+mod <- fetch(dat="paleomap",var="model", ver="v19o_r1c")
 ```
 
 To be able to use our SST data together with genus occurrences, we will match the closest temperature layer available to each stage in our data. 
